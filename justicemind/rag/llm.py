@@ -7,7 +7,17 @@ from google.genai import types
 
 load_dotenv()
 
-_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+_client = None
+
+
+def _get_client():
+    global _client
+    if _client is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not set")
+        _client = genai.Client(api_key=api_key)
+    return _client
 
 _SYSTEM = (
     "You are JusticeMind, a precise AI legal assistant. "
@@ -24,7 +34,7 @@ _SYSTEM = (
 def generate_answer(question: str, context: str) -> str:
     """Call Gemini 2.5 with context and question; return the cited answer string."""
     prompt = f"Context:\n\n{context}\n\n---\n\nQuestion: {question}"
-    resp = _client.models.generate_content(
+    resp = _get_client().models.generate_content(
         model="gemini-2.5-pro-exp-03-25",
         contents=prompt,
         config=types.GenerateContentConfig(
