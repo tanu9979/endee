@@ -16,11 +16,12 @@ services:
   api:
     build: .
     container_name: justicemind-api
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     environment:
       ENDEE_HOST: http://endee:8080
-      GROQ_API_KEY: ${GROQ_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     depends_on:
       - endee
     restart: unless-stopped
@@ -28,7 +29,7 @@ services:
   ui:
     build: .
     container_name: justicemind-ui
-    command: streamlit run ui.py --server.port 8501 --server.address 0.0.0.0
+    command: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
     ports:
       - "8501:8501"
     environment:
