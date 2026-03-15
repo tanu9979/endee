@@ -30,3 +30,5 @@ frontend/*
 
 # DS Store
 .DS_Store
+scholarmind/.env
+justicemind/.env
