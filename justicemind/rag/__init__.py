@@ -1,1 +1,1 @@
-"""RAG package for JusticeMind — pipeline and LLM modules."""
+"""RAG package for JusticeMind."""
