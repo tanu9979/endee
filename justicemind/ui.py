@@ -21,14 +21,30 @@ for k, v in [("docs", []), ("answer", None), ("sources", [])]:
         st.session_state[k] = v
 
 DOC_TYPE_MAP = {"Contract / NDA": "contract", "Indian Law / Act": "legislation", "Court Judgement": "judgement"}
-BADGE = {"contract": '<span class="badge-contract">Contract</span>',
-         "legislation": '<span class="badge-legislation">Legislation</span>',
-         "judgement": '<span class="badge-judgement">Judgement</span>'}
+BADGE = {
+    "contract": '<span class="badge-contract">Contract</span>',
+    "legislation": '<span class="badge-legislation">Legislation</span>',
+    "judgement": '<span class="badge-judgement">Judgement</span>',
+}
 
+
+def api_available() -> bool:
+    """Check if the FastAPI backend is reachable."""
+    try:
+        r = requests.get(f"{API_BASE}/health", timeout=3)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
 with st.sidebar:
     st.title("⚖️ JusticeMind")
     st.caption("Powered by Endee Vector DB")
     st.divider()
+
     st.subheader("📂 Upload Document")
     uploaded = st.file_uploader("Choose a PDF or TXT file", type=["pdf", "txt"])
     doc_type_label = st.selectbox("Document type", list(DOC_TYPE_MAP.keys()))
@@ -36,9 +52,12 @@ with st.sidebar:
     if st.button("⬆️ Upload & Ingest") and uploaded:
         with st.spinner("Ingesting…"):
             try:
-                r = requests.post(f"{API_BASE}/upload",
-                                  files={"file": (uploaded.name, uploaded.getvalue(), uploaded.type)},
-                                  data={"doc_type": DOC_TYPE_MAP[doc_type_label]}, timeout=180)
+                r = requests.post(
+                    f"{API_BASE}/upload",
+                    files={"file": (uploaded.name, uploaded.getvalue(), uploaded.type)},
+                    data={"doc_type": DOC_TYPE_MAP[doc_type_label]},
+                    timeout=180,
+                )
                 r.raise_for_status()
                 d = r.json()
                 st.success(f"✅ **{d['filename']}** — {d['chunk_count']} chunks ingested")
@@ -57,8 +76,10 @@ with st.sidebar:
 
     for doc in st.session_state.docs:
         c1, c2 = st.columns([5, 1])
-        c1.markdown(f"**{doc['filename']}** {BADGE.get(doc['doc_type'],'')} · {doc['chunk_count']} chunks",
-                    unsafe_allow_html=True)
+        c1.markdown(
+            f"**{doc['filename']}** {BADGE.get(doc['doc_type'], '')} · {doc['chunk_count']} chunks",
+            unsafe_allow_html=True,
+        )
         if c2.button("🗑️", key=f"del_{doc['doc_id']}"):
             try:
                 requests.delete(f"{API_BASE}/documents/{doc['doc_id']}", timeout=10).raise_for_status()
@@ -67,6 +88,63 @@ with st.sidebar:
             except Exception as e:
                 st.error(str(e))
 
+# ---------------------------------------------------------------------------
+# Main panel
+# ---------------------------------------------------------------------------
+st.title("⚖️ JusticeMind")
+st.subheader("AI-Powered Legal Document Q&A Engine")
+st.caption("Upload contracts, Indian laws, or court judgements — ask questions, get cited answers.")
+
+st.divider()
+
+if not api_available():
+    st.info(
+        "🔌 **Backend not connected.** This demo UI is live on Streamlit Cloud. "
+        "To use the full app with document upload and Q&A, run it locally with Docker:\n\n"
+        "```bash\ngit clone https://github.com/tanu9979/endee\n"
+        "cd endee/justicemind\n"
+        "cp .env.example .env  # add GEMINI_API_KEY\n"
+        "docker compose up --build\n```\n\n"
+        "Then open **http://localhost:8501**"
+    )
+
+    st.markdown("---")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Vector Database", "Endee Hybrid", "dense + sparse")
+    col2.metric("LLM", "Gemini 2.5 Pro", "Google AI")
+    col3.metric("Embeddings", "all-MiniLM-L6-v2", "384-dim")
+
+    st.markdown("---")
+    st.markdown("### 🏗️ Architecture")
+    st.code("""
+User → Streamlit UI → FastAPI Backend
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+     SentenceTransformer           BM25Encoder
+     (384-dim dense vec)       (sparse 30k-dim)
+              └────────────┬────────────┘
+                           ▼
+              Endee Hybrid Index (cosine/INT8)
+                           │
+                           ▼
+              Groq llama-3.1-8b-instant
+                           │
+                           ▼
+              Cited Answer + Sources
+    """, language="text")
+
+    st.markdown("### 📄 Supported Document Types")
+    st.table({
+        "Type": ["Contract / NDA", "Indian Legislation", "Court Judgement"],
+        "Examples": ["Employment agreements, NDAs", "IPC, Constitution, IT Act", "Supreme Court rulings"],
+        "doc_type": ["contract", "legislation", "judgement"],
+    })
+    st.stop()
+
+# ---------------------------------------------------------------------------
+# Full Q&A UI (only shown when backend is available)
+# ---------------------------------------------------------------------------
 st.header("Ask a Legal Question")
 st.caption("Upload a document first, then ask questions about it")
 
@@ -113,6 +191,8 @@ if st.session_state.answer:
     if st.session_state.sources:
         st.subheader("📎 Retrieved Sources")
         for i, src in enumerate(st.session_state.sources):
-            with st.expander(f"[{i+1}] {src['filename']} — chunk {src['chunk_idx']} (similarity: {src['similarity']})"):
+            with st.expander(
+                f"[{i+1}] {src['filename']} — chunk {src['chunk_idx']} (similarity: {src['similarity']})"
+            ):
                 st.markdown(f"{BADGE.get(src['doc_type'], src['doc_type'])}  {src['excerpt']}",
                             unsafe_allow_html=True)
